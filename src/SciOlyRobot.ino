@@ -14,6 +14,7 @@ const int RIGHT_SERVO_PIN = 21;      // Pin for right servo
 // Constants
 const int maxDistance = 30;         // Max distance in cm to stop the robot
 const int maxSensorDistance = 200;  // Maximum sensor distance for NewPing (200 cm)
+float speedCmPerSec = 27;
 
 //IMU Constants
 #define BNO08X_INT A4
@@ -51,42 +52,6 @@ void moveForward() {
 void stopRobot() {
   leftServo.write(90);   // Stop
   rightServo.write(90);  // Stop
-}
-
-void setupIMU() {
-  Wire.begin();
-  Wire.flush();
-
-  //if (imu.begin() == false) {  // Setup without INT/RST control (Not Recommended)
-  if (imu.begin(BNO08X_ADDR, Wire, -1, -1) == false) {
-    Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
-    while (1)
-      ;
-  }
-  Serial.println("BNO08x found!");
-
-  Wire.setClock(400000); //Increase I2C data rate to 400kHz
-
-  setReports();
-
-  Serial.println("Reading events");
-  delay(100);
-}
-
-// Here is where you define the sensor outputs you want to receive
-void setReports(void) {
-  Serial.println("Setting desired reports");
-  if (imu.enableGyro() == true) {
-    Serial.println("Gyro enabled");
-  } else {
-    Serial.println("Could not enable gyro");
-  }
-  if (imu.enableRotationVector() == true) {
-    Serial.println("Rotation vector enabled");
-    Serial.println("Output in form i, j, k, real, accuracy");
-  } else {
-    Serial.println("Could not enable rotation vector");
-  }
 }
 
 void moveForwardDistance(float targetDistanceCm) {
@@ -140,12 +105,12 @@ void moveForwardDistance(float targetDistanceCm) {
 
 float getCurrentAngle() {
   if (imu.getSensorEvent() == false || imu.getSensorEventID() != SENSOR_REPORTID_ROTATION_VECTOR) {
-    currentAngle = imu.getQuatK();
+    currentAngle = imu.getYaw();
   }
   return currentAngle;
 }
 
-void moveDistanceTime(float distanceCm, float speedCmPerSec) {
+void moveDistanceTime(float distanceCm) {
   // Calculate the time in milliseconds required to move the specified distance
   float timeMs = (distanceCm / speedCmPerSec) * 1000;
 
@@ -243,14 +208,45 @@ void rotateLeftTime(float time) {
   stopRobot();
 }
 
+void setupIMU() {
+  Wire.begin();
+  Wire.flush();
+
+  //if (imu.begin() == false) {  // Setup without INT/RST control (Not Recommended)
+  if (imu.begin(BNO08X_ADDR, Wire, -1, -1) == false) {
+    Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
+    while (1)
+      ;
+  }
+  Serial.println("BNO08x found!");
+
+  // Wire.setClock(400000); //Increase I2C data rate to 400kHz
+
+  setReports();
+
+  Serial.println("Reading events");
+  delay(100);
+}
+
+// Here is where you define the sensor outputs you want to receive
+void setReports(void) {
+  Serial.println("Setting desired reports");
+  if (imu.enableGyro() == true) {
+    Serial.println("Gyro enabled");
+  } else {
+    Serial.println("Could not enable gyro");
+  }
+  if (imu.enableRotationVector() == true) {
+    Serial.println("Rotation vector enabled");
+    Serial.println("Output in form i, j, k, real, accuracy");
+  } else {
+    Serial.println("Could not enable rotation vector");
+  }
+}
+
 void setup() {
   // Set up serial communication
   Serial.begin(115200);
-
-  // while(!Serial) delay(10); // Wait for Serial to become available.
-  // Necessary for boards with native USB (like the SAMD51 Thing+).
-  // For a final version of a project that does not need serial debug (or a USB cable plugged in),
-  // Comment out this while loop, or it will prevent the remaining code from running.
 
   // Attach servos
   leftServo.attach(LEFT_SERVO_PIN);
@@ -259,81 +255,30 @@ void setup() {
   // Initialize the BNO08X over I2C using Qwiic
   setupIMU();
 
-  // moveForward();
-  // moveForwardDistance(20);
-  delay(1500);
-  moveDistanceTime(275, 27);
-  // rotateRight();
-  delay(2800);
-  rotateRightTime(0.60);
-  delay(2800);
-  // rotateLeftTime(0.55);
-  moveDistanceTime(180, 27);
+  moveDistanceTime(40);
 }
 
 void loop() {
-  // Get the distance from the ultrasonic sensor
-  unsigned int distance = sonar.ping_cm();
-
-  unsigned int pingTime = sonar.ping();   //Gets the ping time in microseconds.
-  distance = sonar.convert_cm(pingTime);  // Convert ping time in cm, serial out.
-
-  // Print the distance to the serial monitor
-  Serial.print("Distance:" + String(distance) + ",");
-
   // IMU stuff
   if (imu.wasReset()) {
     Serial.print("sensor was reset ");
     setReports();
   }
+  
+  // Print the distance to the serial monitor
+  // unsigned int distance = sonar.ping_cm();
+  // Serial.print("Distance:" + String(distance) + ",");
 
   // Has a new event come in on the Sensor Hub Bus?
-  if (imu.getSensorEvent() == true) {
+  if (imu.getSensorEvent() == true && imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
+    float yaw = imu.getYaw();
 
-    // is it the correct sensor data we want?
-    if (imu.getSensorEventID() == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
-
-      float x = imu.getGyroX();
-      float y = imu.getGyroY();
-      float z = imu.getGyroZ();
-
-      // Serial.print("GyroX:");
-      // Serial.print(x);
-      // Serial.print(",");
-      // Serial.print("GyroY:");
-      // Serial.print(y);
-      // Serial.print(",");
-      Serial.print("GyroZ:");
-      Serial.print(z);
-    }
-
-    if (imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
-      float quatI = imu.getQuatI();
-      float quatJ = imu.getQuatJ();
-      float quatK = imu.getQuatK();
-      float quatReal = imu.getQuatReal();
-      float quatRadianAccuracy = imu.getQuatRadianAccuracy();
-
-      // Serial.print(",");
-      // Serial.print("QuatI:");
-      // Serial.print(quatI);
-      // Serial.print(",");
-      // Serial.print("QuatJ:");
-      // Serial.print(quatJ);
-      // Serial.print(",");
-      Serial.print("QuatK:");
-      Serial.print(quatK);
-      Serial.print(",");
-      // Serial.print("QuatReal:");
-      // Serial.print(quatReal);
-      // Serial.print(",");
-      // Serial.print("QuatRadianAccuracy:");
-      // Serial.print(quatRadianAccuracy, 2);
-    }
+    Serial.print("Yaw:");
+    Serial.print(yaw);
+    Serial.print(",");
   }
 
   Serial.println();
 
-  // Add a small delay
   delay(10);
 }
