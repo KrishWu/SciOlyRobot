@@ -1,135 +1,65 @@
-// put your setup code here, to run once:
 #include <Wire.h>
-#include <ESP32Servo.h>                       // Use ESP32Servo instead of the default Servo library
 #include <SparkFun_BNO08x_Arduino_Library.h>  // Use the BNO08x Library
-#include <NewPing.h>                          // Include the NewPing library
+#include <AccelStepper.h>
 #include <PID_v1.h>
 
-// Pin definitions
-const int ULTRASONIC_TRIG_PIN = 6;   // Trigger pin of the ultrasonic sensor
-const int ULTRASONIC_ECHO_PIN = 18;  // Echo pin of the ultrasonic sensor
-const int LEFT_SERVO_PIN = 2;        // Pin for left servo
-const int RIGHT_SERVO_PIN = 21;      // Pin for right servo
+// Pin definitions for ULN2003 and 28BYJ-48
+#define LEFT_IN1 4
+#define LEFT_IN2 5
+#define LEFT_IN3 19
+#define LEFT_IN4 20
+#define RIGHT_IN1 8
+#define RIGHT_IN2 10
+#define RIGHT_IN3 11
+#define RIGHT_IN4 22
 
-// Constants
-const int maxDistance = 30;         // Max distance in cm to stop the robot
-const int maxSensorDistance = 200;  // Maximum sensor distance for NewPing (200 cm)
-float speedCmPerSec = 27;
-
-//IMU Constants
+// IMU Constants
 #define BNO08X_INT A4
 #define BNO08X_RST A5
 #define BNO08X_ADDR 0x4B  // SparkFun BNO08x Breakout (Qwiic) defaults to 0x4B
 
-// Servo objects
-Servo leftServo;
-Servo rightServo;
-
-float currentAngle = 0.0;
-
-// NewPing object for ultrasonic sensor
-NewPing sonar(ULTRASONIC_TRIG_PIN, ULTRASONIC_ECHO_PIN, maxSensorDistance);
+// Define stepper objects in FULL4WIRE mode for ULN2003
+AccelStepper leftStepper(AccelStepper::FULL4WIRE, LEFT_IN1, LEFT_IN3, LEFT_IN2, LEFT_IN4);
+AccelStepper rightStepper(AccelStepper::FULL4WIRE, RIGHT_IN1, RIGHT_IN3, RIGHT_IN2, RIGHT_IN4);
 
 // BNO08x IMU object
-BNO08x imu;  // Create an instance of the BNO08X IMU
+BNO08x imu;
 
+// PID variables
 double input90, output90, setPoint90;
-
-double kP1 = 10, kI1 = 0, kD1 = 0;
+double kP1 = 100, kI1 = 10, kD1 = 0;
 PID turn90PID(&input90, &output90, &setPoint90, kP1, kI1, kD1, DIRECT);
 
-double inputForward, outputForward, setPointForward;
-double kP2 = 0.001, kI2 = 0, kD2 = 0;
-PID forwardPID(&inputForward, &outputForward, &setPointForward, kP2, kI2, kD2, DIRECT);
+double maxSpeed = 2000; // Steps per second
 
-// Function to move the robot forward
-void moveForward() {
-  leftServo.write(180);  // Full speed forward
-  rightServo.write(0);   // Full speed forward
-}
+float currentAngle = 0.0;
+unsigned long startTime;               // Start time of the program
+unsigned long desiredTotalDuration = 20000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
-// Function to stop the robot
-void stopRobot() {
-  leftServo.write(90);   // Stop
-  rightServo.write(90);  // Stop
-}
 
-void moveForwardDistance(float targetDistanceCm) {
-  // Set up the target distance in centimeters
-  setPointForward = targetDistanceCm;
-
-  // Initialize PID
-  forwardPID.SetMode(AUTOMATIC);
-  forwardPID.SetOutputLimits(-90, 90);  // Output limits for motor control
-
-  // Reset distance measurement variables
-  unsigned int initialDistance = sonar.ping_cm();
-  if (initialDistance == 0) {
-    Serial.println("Ultrasonic sensor failed to get initial distance.");
-    return;
+bool isValidYaw(float &yaw) {
+  if (imu.getSensorEvent() == true && imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
+    yaw = imu.getYaw();
+    return !isnan(yaw);
   }
-
-  inputForward = 0;  // Start with zero distance traveled
-
-  // Loop until the target distance is reached
-  while (abs(inputForward - setPointForward) > 0.5) {  // Allowable error in cm
-    // Measure the current distance traveled
-    unsigned int currentDistance = sonar.ping_cm();
-    if (currentDistance > 0) {
-      inputForward = currentDistance - initialDistance;  // Update the distance traveled
-    } else {
-      Serial.println("Ultrasonic sensor error during distance measurement.");
-    }
-
-    forwardPID.Compute();  // Compute PID output
-
-    // Adjust motor speeds based on PID output
-    int leftSpeed = constrain(90 + outputForward, 0, 180);
-    int rightSpeed = constrain(90 - outputForward, 0, 180);
-
-    leftServo.write(leftSpeed);
-    rightServo.write(rightSpeed);
-
-    Serial.print("TargetDistance:");
-    Serial.print(setPointForward);
-    Serial.print(",Traveled:");
-    Serial.print(inputForward);
-    Serial.print(",Output:");
-    Serial.println(outputForward);
-
-    delay(10);  // Small delay for PID stability
-  }
-
-  stopRobot();  // Stop the robot after reaching the target distance
+  return false;
 }
 
 float getCurrentAngle() {
-  if (imu.getSensorEvent() == false || imu.getSensorEventID() != SENSOR_REPORTID_ROTATION_VECTOR) {
-    currentAngle = imu.getYaw();
+  if (imu.getSensorEvent() == true && imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
+    float yaw = imu.getYaw();
+    if (!isnan(yaw)) {
+      currentAngle = yaw;
+    }
   }
   return currentAngle;
 }
 
-void moveDistanceTime(float distanceCm) {
-  // Calculate the time in milliseconds required to move the specified distance
-  float timeMs = (distanceCm / speedCmPerSec) * 1000;
-
-  // Move the robot forward at full speed for the calculated time
-  leftServo.write(132);  // Full speed forward
-  rightServo.write(45);   // Full speed forward
-
-  // Delay for the calculated time
-  delay(timeMs);
-
-  // Stop the robot
-  stopRobot();
-
-  // Debugging information
-  Serial.print("Moved ");
-  Serial.print(distanceCm);
-  Serial.print(" cm in ");
-  Serial.print(timeMs);
-  Serial.println(" ms.");
+float getCurrentAngleWait() {
+  float yaw = currentAngle;
+  while (!isValidYaw(yaw)) {}
+  currentAngle = yaw;
+  return currentAngle;
 }
 
 // Helper function to normalize angles to [-π, π)
@@ -144,29 +74,33 @@ float normalizeAngleToPi(float angle) {
 }
 
 void rotateToAngle(float targetAngle) {
-  // Normalize angles to [-π, π)
-
-  float currentAngle = getCurrentAngle();
+  float currentAngle = getCurrentAngleWait();
   float angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
-  // PID setup
-  turn90PID.SetMode(AUTOMATIC);
-  turn90PID.SetOutputLimits(-90, 90);  // Output limits for motor control
+  setPoint90 = targetAngle;
 
-  // Rotate until the angular difference is within the tolerance
-  while (abs(angularDifference) > 0.05) {  // Allowable error (tolerance) in radians
+  Serial.print("CurrentAngle:");
+  Serial.print(currentAngle);
+  Serial.print(",");
+  Serial.print("AngularDifference:");
+  Serial.print(angularDifference);
+  Serial.println(",");
+
+  turn90PID.SetMode(AUTOMATIC);
+  turn90PID.SetOutputLimits(-1000, 1000);  // Output limits for motor control (steps per second)
+
+  while (abs(angularDifference) > 0.02) {  // Allowable error (tolerance) in radians
     currentAngle = getCurrentAngle();      // Update current angle
     angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
     input90 = currentAngle;  // Update PID input
     turn90PID.Compute();     // Compute PID output
 
-    // Adjust motor speeds based on PID output
-    int leftSpeed = constrain(90 + output90, 0, 180);
-    int rightSpeed = constrain(90 - output90, 0, 180);
+    leftStepper.setSpeed(-output90);
+    rightStepper.setSpeed(-output90);
 
-    leftServo.write(leftSpeed);
-    rightServo.write(rightSpeed);
+    leftStepper.runSpeed();
+    rightStepper.runSpeed();
 
     Serial.print("currentAngle:");
     Serial.print(currentAngle);
@@ -179,56 +113,138 @@ void rotateToAngle(float targetAngle) {
     delay(10);  // Small delay for PID stability
   }
 
-  stopRobot();  // Stop the robot after reaching the target angle
+  leftStepper.stop();
+  rightStepper.stop();
 }
 
 void rotateRight() {
-  float currentAngle = getCurrentAngle();
+  float currentAngle = getCurrentAngleWait();
   float targetAngle = normalizeAngleToPi(currentAngle - PI / 2);  // Rotate 90 degrees right
   rotateToAngle(targetAngle);
 }
 
 void rotateLeft() {
-  float currentAngle = getCurrentAngle();
+  float currentAngle = getCurrentAngleWait();
   float targetAngle = normalizeAngleToPi(currentAngle + PI / 2);  // Rotate 90 degrees left
   rotateToAngle(targetAngle);
 }
 
-void rotateRightTime(float time) {
-  leftServo.write(180);
-  rightServo.write(180);
-  delay(time * 1000);
-  stopRobot();
+void rotateToSpecificAngle(float targetAngle) {
+  rotateToAngle(normalizeAngleToPi(targetAngle));
 }
 
-void rotateLeftTime(float time) {
-  leftServo.write(0);
-  rightServo.write(0);
-  delay(time * 1000);
-  stopRobot();
+void rotateToZero() {
+  rotateToSpecificAngle(0);
 }
+
+void rotateTo90() {
+  rotateToSpecificAngle(PI / 2);
+}
+
+void rotateTo180() {
+  rotateToSpecificAngle(PI);
+}
+
+void rotateTo270() {
+  rotateToSpecificAngle(-PI / 2);
+}
+
+void rotateLeftExact() {
+  float currentAngle = getCurrentAngleWait();
+  float targetAngle;
+
+  // Determine which of the standard angles (0, 90, 180, 270) the current angle is closest to
+  if (currentAngle > -PI / 4 && currentAngle <= PI / 4) {
+    targetAngle = PI / 2;  // Closest to 0, turn to 90
+  } else if (currentAngle > PI / 4 && currentAngle <= 3 * PI / 4) {
+    targetAngle = PI;  // Closest to 90, turn to 180
+  } else if (currentAngle > 3 * PI / 4 || currentAngle <= -3 * PI / 4) {
+    targetAngle = -PI / 2;  // Closest to 180, turn to 270
+  } else {
+    targetAngle = 0;  // Closest to 270, turn to 0
+  }
+
+  rotateToSpecificAngle(targetAngle);
+}
+
+void rotateRightExact() {
+  float currentAngle = getCurrentAngleWait();
+  float targetAngle;
+
+  // Determine which of the standard angles (0, 90, 180, 270) the current angle is closest to
+  if (currentAngle > -PI / 4 && currentAngle <= PI / 4) {
+    targetAngle = -PI / 2;  // Closest to 0, turn to 270
+  } else if (currentAngle > PI / 4 && currentAngle <= 3 * PI / 4) {
+    targetAngle = 0;  // Closest to 90, turn to 0
+  } else if (currentAngle > 3 * PI / 4 || currentAngle <= -3 * PI / 4) {
+    targetAngle = PI / 2;  // Closest to 180, turn to 90
+  } else {
+    targetAngle = PI;  // Closest to 270, turn to 180
+  }
+
+  Serial.print("CurrentAngle:");
+  Serial.print(currentAngle);
+  Serial.print(",");
+  Serial.print("TargetAngle:");
+  Serial.print(targetAngle);
+  Serial.println(",");
+  rotateToSpecificAngle(targetAngle);
+}
+
+void driveForwardRotations(int rotations) {
+  int steps = rotations * 2048;  // Calculate total steps for the given number of rotations
+
+  // Reverse the left stepper direction by negating the steps
+  leftStepper.move(-steps);
+  rightStepper.move(steps);
+
+  // Run the steppers until they reach the target position
+  while (leftStepper.distanceToGo() != 0 || rightStepper.distanceToGo() != 0) {
+    leftStepper.run();
+    rightStepper.run();
+  }
+
+  leftStepper.stop();
+  rightStepper.stop();
+}
+
+void driveForwardTimed(int rotations, unsigned long timeToComplete) {
+  int steps = rotations * 2048;  // Calculate total steps for the given number of rotations
+  float speed = min((float)steps / ((timeToComplete - 800.0) / 1000.0), maxSpeed);  // Steps per second added 800 less milliseconds to account for ramp up and ramp down
+
+  leftStepper.setMaxSpeed(speed);
+  rightStepper.setMaxSpeed(speed);
+
+  leftStepper.move(-steps);
+  rightStepper.move(steps);
+
+  // Run the steppers until they reach the target position
+  while (leftStepper.distanceToGo() != 0 || rightStepper.distanceToGo() != 0) {
+    leftStepper.run();
+    rightStepper.run();
+  }
+
+  leftStepper.stop();
+  rightStepper.stop();
+}
+
 
 void setupIMU() {
   Wire.begin();
   Wire.flush();
 
-  //if (imu.begin() == false) {  // Setup without INT/RST control (Not Recommended)
   if (imu.begin(BNO08X_ADDR, Wire, -1, -1) == false) {
     Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
-    while (1)
-      ;
+    while (1);
   }
   Serial.println("BNO08x found!");
 
-  // Wire.setClock(400000); //Increase I2C data rate to 400kHz
-
   setReports();
-
   Serial.println("Reading events");
   delay(100);
 }
 
-// Here is where you define the sensor outputs you want to receive
+// Define the sensor outputs you want to receive
 void setReports(void) {
   Serial.println("Setting desired reports");
   if (imu.enableGyro() == true) {
@@ -245,40 +261,51 @@ void setReports(void) {
 }
 
 void setup() {
-  // Set up serial communication
   Serial.begin(115200);
 
-  // Attach servos
-  leftServo.attach(LEFT_SERVO_PIN);
-  rightServo.attach(RIGHT_SERVO_PIN);
+  startTime = millis();
 
-  // Initialize the BNO08X over I2C using Qwiic
+  // Initialize steppers
+  leftStepper.setMaxSpeed(maxSpeed);
+  leftStepper.setAcceleration(500);
+  rightStepper.setMaxSpeed(maxSpeed);
+  rightStepper.setAcceleration(500);
+
   setupIMU();
 
-  moveDistanceTime(40);
+  driveForwardRotations(2);
+  rotateRightExact();
+  driveForwardRotations(1);
+
+  // Adjust the final move to fit within the desired total duration
+  unsigned long elapsedTime = millis() - startTime;
+  unsigned long remainingTime = desiredTotalDuration - elapsedTime;
+
+  if (remainingTime > 0) {
+    Serial.print("Adjusting final move to complete in remaining time: ");
+    Serial.println(remainingTime);
+    driveForwardTimed(1, remainingTime);  // Adjusts the last move
+  } else {
+    driveForwardRotations(1);
+  }
+  Serial.print("FinishedTime:");
+  Serial.print(millis() - startTime);
+  Serial.println(",");
 }
 
 void loop() {
-  // IMU stuff
   if (imu.wasReset()) {
     Serial.print("sensor was reset ");
     setReports();
   }
-  
-  // Print the distance to the serial monitor
-  // unsigned int distance = sonar.ping_cm();
-  // Serial.print("Distance:" + String(distance) + ",");
 
-  // Has a new event come in on the Sensor Hub Bus?
   if (imu.getSensorEvent() == true && imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
     float yaw = imu.getYaw();
-
     Serial.print("Yaw:");
     Serial.print(yaw);
     Serial.print(",");
+    Serial.println();
   }
-
-  Serial.println();
 
   delay(10);
 }
