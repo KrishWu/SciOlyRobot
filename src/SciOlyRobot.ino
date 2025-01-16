@@ -8,9 +8,9 @@
 #define LEFT_IN2 5
 #define LEFT_IN3 19
 #define LEFT_IN4 20
-#define RIGHT_IN1 8
-#define RIGHT_IN2 10
-#define RIGHT_IN3 11
+#define RIGHT_IN1 23
+#define RIGHT_IN2 8
+#define RIGHT_IN3 10
 #define RIGHT_IN4 22
 
 // IMU Constants
@@ -27,14 +27,16 @@ BNO08x imu;
 
 // PID variables
 double input90, output90, setPoint90;
-double kP1 = 100, kI1 = 10, kD1 = 0;
+double kP1 = 500, kI1 = 50, kD1 = 0;
 PID turn90PID(&input90, &output90, &setPoint90, kP1, kI1, kD1, DIRECT);
 
-double maxSpeed = 2000; // Steps per second
+double maxSpeed = 500; // Steps per second
+double wheelDiameter = 7.6;
+double wheelCircumference = wheelDiameter * PI;
 
 float currentAngle = 0.0;
-unsigned long startTime;               // Start time of the program
-unsigned long desiredTotalDuration = 20000;  // Total desired duration in milliseconds (e.g., 20 seconds)
+long startTime;               // Start time of the program
+long desiredTotalDuration = 50000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
 
 bool isValidYaw(float &yaw) {
@@ -77,7 +79,7 @@ void rotateToAngle(float targetAngle) {
   float currentAngle = getCurrentAngleWait();
   float angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
-  setPoint90 = targetAngle;
+  setPoint90 = 0.0;
 
   Serial.print("CurrentAngle:");
   Serial.print(currentAngle);
@@ -87,13 +89,13 @@ void rotateToAngle(float targetAngle) {
   Serial.println(",");
 
   turn90PID.SetMode(AUTOMATIC);
-  turn90PID.SetOutputLimits(-1000, 1000);  // Output limits for motor control (steps per second)
+  turn90PID.SetOutputLimits(-900, 900);  // Output limits for motor control (steps per second)
 
-  while (abs(angularDifference) > 0.02) {  // Allowable error (tolerance) in radians
+  while (abs(angularDifference) > 0.01) {  // Allowable error (tolerance) in radians
     currentAngle = getCurrentAngle();      // Update current angle
     angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
-    input90 = currentAngle;  // Update PID input
+    input90 = angularDifference;  // Update PID input
     turn90PID.Compute();     // Compute PID output
 
     leftStepper.setSpeed(-output90);
@@ -110,7 +112,7 @@ void rotateToAngle(float targetAngle) {
     Serial.print(output90);
     Serial.println(",");
 
-    delay(10);  // Small delay for PID stability
+    delay(2);  // Small delay for PID stability
   }
 
   leftStepper.stop();
@@ -208,7 +210,7 @@ void driveForwardRotations(int rotations) {
   rightStepper.stop();
 }
 
-void driveForwardTimed(int rotations, unsigned long timeToComplete) {
+void driveForwardTimed(int rotations, long timeToComplete) {
   int steps = rotations * 2048;  // Calculate total steps for the given number of rotations
   float speed = min((float)steps / ((timeToComplete - 800.0) / 1000.0), maxSpeed);  // Steps per second added 800 less milliseconds to account for ramp up and ramp down
 
@@ -226,6 +228,14 @@ void driveForwardTimed(int rotations, unsigned long timeToComplete) {
 
   leftStepper.stop();
   rightStepper.stop();
+}
+
+void driveForwardDistance(int distance) {
+  driveForwardRotations(distance / wheelCircumference);
+}
+
+void driveForwardDistanceTimed(int distance, long timeToComplete) {
+  driveForwardTimed(distance / wheelCircumference, timeToComplete);
 }
 
 
@@ -273,20 +283,33 @@ void setup() {
 
   setupIMU();
 
-  driveForwardRotations(2);
-  rotateRightExact();
-  driveForwardRotations(1);
+  driveForwardDistance(100);
+  rotateLeftExact();
+  driveForwardDistance(100);
+  rotateLeftExact();
+  // driveForwardDistance(100);
+  // rotateRightExact();
+  // driveForwardDistance(150);
+  // rotateRightExact();
+  // driveForwardDistance(200);
+  // rotateRightExact();
+  // driveForwardDistance(100);
+  // driveForwardDistance(-100);
+  // rotateRightExact();
 
   // Adjust the final move to fit within the desired total duration
-  unsigned long elapsedTime = millis() - startTime;
-  unsigned long remainingTime = desiredTotalDuration - elapsedTime;
+  long elapsedTime = millis() - startTime;
+  long remainingTime = desiredTotalDuration - elapsedTime;
 
   if (remainingTime > 0) {
     Serial.print("Adjusting final move to complete in remaining time: ");
-    Serial.println(remainingTime);
-    driveForwardTimed(1, remainingTime);  // Adjusts the last move
+    // Serial.println(remainingTime);
+    // driveForwardTimed(1, remainingTime);  // Adjusts the last move
+    driveForwardDistanceTimed(100, remainingTime);
+
   } else {
-    driveForwardRotations(1);
+    // driveForwardRotations(1);
+    driveForwardDistance(100);
   }
   Serial.print("FinishedTime:");
   Serial.print(millis() - startTime);
