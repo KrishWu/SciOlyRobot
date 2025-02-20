@@ -30,12 +30,29 @@ float getCurrentAngleWait() {
   return currentAngle;
 }
 
-void setupIMU() {
+void resetI2C() {
+  pinMode(SDA, INPUT_PULLUP);
+  pinMode(SCL, INPUT_PULLUP);
+
+  for (int i = 0; i < 10; i++) {  // Send clock pulses to release stuck I2C
+    pinMode(SCL, OUTPUT);
+    digitalWrite(SCL, LOW);
+    delay(5);
+    digitalWrite(SCL, HIGH);
+    delay(5);
+  }
+
   Wire.begin();
+}
+
+void setupIMU() {
+  // Wire.begin();
+  resetI2C();
   Wire.flush();
 
   if (imu.begin(BNO08X_ADDR, Wire, -1, -1) == false) {
     Serial.println("BNO08x not detected at default I2C address. Check your jumpers and the hookup guide. Freezing...");
+    delay(500);
     while (1);
   }
   Serial.println("BNO08x found!");

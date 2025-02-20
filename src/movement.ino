@@ -5,7 +5,7 @@ PID turn90PID(&input90, &output90, &setPoint90, kP1, kI1, kD1, DIRECT);
 
 // PID variables for distance control
 double inputDistance, outputDistance, setPointDistance;
-double kPDistance = 1.0, kIDistance = 0.1, kDDistance = 0.05;
+double kPDistance = 0.20, kIDistance = 0.10, kDDistance = 0.0;
 PID distancePID(&inputDistance, &outputDistance, &setPointDistance, kPDistance, kIDistance, kDDistance, DIRECT);
 
 // Helper function to normalize angles to [-π, π)
@@ -34,8 +34,10 @@ void rotateToAngle(float targetAngle) {
 
   turn90PID.SetMode(AUTOMATIC);
   turn90PID.SetOutputLimits(-255, 255);  // Output limits for motor control (steps per second)
+  int timeAtDestination = 0;
+  int i = 0;
 
-  while (abs(angularDifference) > 0.01) {  // Allowable error (tolerance) in radians
+  while (timeAtDestination < 20) {  // Allowable error (tolerance) in radians
     currentAngle = getCurrentAngle();      // Update current angle
     angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
@@ -54,14 +56,87 @@ void rotateToAngle(float targetAngle) {
       rightMotor.run(L298N::BACKWARD);
     }
 
-    Serial.print("currentAngle:");
-    Serial.print(currentAngle);
-    Serial.print(",AngularDifference:");
-    Serial.print(angularDifference);
-    Serial.print(",output90:");
-    Serial.print(output90);
-    Serial.println(",");
+    if (i >= 5000) {
+      Serial.print("currentAngle:");
+      Serial.print(currentAngle);
+      Serial.print(",AngularDifference:");
+      Serial.print(angularDifference);
+      Serial.print(",output90:");
+      Serial.print(output90);
+      Serial.println(",");
+      i = 0;
+    }
 
+    if (abs(angularDifference) < 0.01) {
+      timeAtDestination++;
+    } else {
+      timeAtDestination == 0;
+    }
+
+    i++;
+    delay(1);  // Small delay for PID stability
+  }
+
+  leftMotor.stop();
+  rightMotor.stop();
+  delay(50);
+}
+
+void rotateToAngleLessPrecise(float targetAngle) {
+  float currentAngle = getCurrentAngleWait();
+  float angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
+
+  setPoint90 = 0.0;
+
+  Serial.print("CurrentAngle:");
+  Serial.print(currentAngle);
+  Serial.print(",");
+  Serial.print("AngularDifference:");
+  Serial.print(angularDifference);
+  Serial.println(",");
+
+  turn90PID.SetMode(AUTOMATIC);
+  turn90PID.SetOutputLimits(-255, 255);  // Output limits for motor control (steps per second)
+  int timeAtDestination = 0;
+  int i = 0;
+
+  while (timeAtDestination < 2) {  // Allowable error (tolerance) in radians
+    currentAngle = getCurrentAngle();      // Update current angle
+    angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
+
+    input90 = angularDifference;  // Update PID input
+    turn90PID.Compute();     // Compute PID output\
+
+    if (output90 > 0) {
+      leftMotor.setSpeed(output90);
+      rightMotor.setSpeed(output90);
+      leftMotor.run(L298N::BACKWARD);
+      rightMotor.run(L298N::FORWARD);
+    } else {
+      leftMotor.setSpeed(-output90);
+      rightMotor.setSpeed(-output90);
+      leftMotor.run(L298N::FORWARD);
+      rightMotor.run(L298N::BACKWARD);
+    }
+
+    if (i >= 5000) {
+      Serial.print("currentAngle:");
+      Serial.print(currentAngle);
+      Serial.print(",AngularDifference:");
+      Serial.print(angularDifference);
+      Serial.print(",output90:");
+      Serial.print(output90);
+      Serial.println(",");
+      i = 0;
+    }
+
+    if (abs(angularDifference) < PI / 8) {
+      timeAtDestination++;
+    } else {
+      timeAtDestination == 0;
+    }
+
+    i++;
     delay(1);  // Small delay for PID stability
   }
 
@@ -163,21 +238,22 @@ void rotateRightExact() {
 
 void driveForwardDistance(double distance) {
   // Convert distance to encoder ticks
-  double targetTicks = (distance / wheelCircumference) * 1050;  // Assuming 360 ticks per revolution
-  leftEncoder.write(0);  // Reset encoder counts
-  rightEncoder.write(0);
+  double targetTicks = (distance / wheelCircumference) * 150;  // Assuming 360 ticks per revolution
+  double encoderStartPos = (leftEncoder.read() + rightEncoder.read()) / 2;  // Reset encoder counts
 
   setPointDistance = targetTicks;  // Target encoder count
   distancePID.SetMode(AUTOMATIC);  // Enable PID
   distancePID.SetOutputLimits(-255, 255);  // Limit PID output to valid motor speeds
+  int timeAtDestination = 0;
+  int i = 0;
 
-  while (true) {
+  while (timeAtDestination < 50) {
     // Read encoder values
-    double leftTicks = abs(leftEncoder.read());
-    double rightTicks = abs(rightEncoder.read());
+    double leftTicks = abs(leftEncoder.read() * -1);
+    double rightTicks = abs(rightEncoder.read() * -1);
     double averageTicks = (leftTicks + rightTicks) / 2.0;  // Average of both encoders
 
-    inputDistance = averageTicks;  // Update PID input
+    inputDistance = averageTicks - encoderStartPos;  // Update PID input
     distancePID.Compute();         // Compute PID output
 
     // Control motor speeds based on PID output
@@ -193,9 +269,19 @@ void driveForwardDistance(double distance) {
       rightMotor.run(L298N::BACKWARD);
     }
 
+    if (i > 5000) {
+      Serial.print("setPoint:"); Serial.print(setPointDistance);
+      Serial.print(",inputDistance:"); Serial.print(inputDistance);
+      Serial.print(",outputDistance:"); Serial.print(outputDistance);
+      Serial.print(",distance:"); Serial.println((averageTicks - encoderStartPos) - targetTicks);
+      i = 0;
+    }
+
     // Break the loop when the target distance is reached
-    if (abs(averageTicks - targetTicks) < 1) {  // Tolerance of 1 tick
-      break;
+    if (abs((averageTicks - encoderStartPos) - targetTicks) < 20) {  // Tolerance of 1 tick
+      timeAtDestination++;
+    } else {
+      timeAtDestination = 0;
     }
 
     delay(1);  // Small delay for PID stability
@@ -210,9 +296,8 @@ void driveForwardDistance(double distance) {
 
 void driveForwardDistanceTimed(double distance, long timeToComplete) {
   // Convert distance to encoder ticks
-  double targetTicks = (distance / wheelCircumference) * 360;  // Assuming 360 ticks per revolution
-  leftEncoder.write(0);  // Reset encoder counts
-  rightEncoder.write(0);
+  double targetTicks = (distance / wheelCircumference) * (150 * 8 * PI);  // Assuming 360 ticks per revolution
+  double encoderStartPos = (leftEncoder.read() + rightEncoder.read()) / 2;
 
   // Calculate the average ticks per second required to complete the distance in time
   double ticksPerSecond = targetTicks / (timeToComplete / 1000.0);
@@ -224,13 +309,13 @@ void driveForwardDistanceTimed(double distance, long timeToComplete) {
   unsigned long startTime = millis();
   while (millis() - startTime < timeToComplete) {
     // Read encoder values
-    double leftTicks = abs(leftEncoder.read());
-    double rightTicks = abs(rightEncoder.read());
+    double leftTicks = abs(leftEncoder.read() * -1);
+    double rightTicks = abs(rightEncoder.read() * -1);
     double averageTicks = (leftTicks + rightTicks) / 2.0;  // Average of both encoders
 
     // Calculate the current speed (ticks per second)
     double elapsedTime = (millis() - startTime) / 1000.0;  // Elapsed time in seconds
-    double currentTicksPerSecond = averageTicks / elapsedTime;
+    double currentTicksPerSecond = (averageTicks - encoderStartPos) / elapsedTime;
 
     inputDistance = currentTicksPerSecond;  // Update PID input
     distancePID.Compute();                  // Compute PID output

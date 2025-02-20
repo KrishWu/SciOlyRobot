@@ -1,7 +1,7 @@
 // Robot state
 float robotX = startX; // Current x position
 float robotY = startY; // Current y position
-float robotTheta = 0.0; // Current orientation (radians)
+float robotTheta = PI / 2; // Current orientation (radians)
 
 // Wheel encoder readings
 long previousLeftEncoder = 0;  // Previous left encoder count
@@ -9,15 +9,15 @@ long previousRightEncoder = 0; // Previous right encoder count
 
 void updateRobotState() {
     // Get the current IMU yaw angle for robotTheta
-    robotTheta = getCurrentAngle();  // Ensure IMU yaw is normalized
+    robotTheta = getCurrentAngle() - PI / 2;  // Ensure IMU yaw is normalized
 
     // Read the current encoder counts
-    long currentLeftEncoder = leftEncoder.read();
-    long currentRightEncoder = rightEncoder.read();
+    long currentLeftEncoder = leftEncoder.read() * -1;
+    long currentRightEncoder = rightEncoder.read() * -1;
 
     // Calculate the distance traveled by each wheel
-    float leftWheelDistance = (currentLeftEncoder - previousLeftEncoder) * (wheelCircumference / 360.0);  // Convert ticks to distance
-    float rightWheelDistance = (currentRightEncoder - previousRightEncoder) * (wheelCircumference / 360.0);
+    float leftWheelDistance = (currentLeftEncoder - previousLeftEncoder) * wheelCircumference / (150 * 8 * PI);  // Convert encoder rotation ticks to distance
+    float rightWheelDistance = (currentRightEncoder - previousRightEncoder) * wheelCircumference / (150 * 8 * PI);
 
     // Update the previous encoder counts for the next calculation
     previousLeftEncoder = currentLeftEncoder;
@@ -31,19 +31,19 @@ void updateRobotState() {
     robotY += distanceTravelled * sin(robotTheta);
 
     // Print debug information
-    Serial.print("RobotX: "); Serial.print(robotX);
-    Serial.print(", RobotY: "); Serial.print(robotY);
-    Serial.print(", RobotTheta: "); Serial.println(robotTheta);
+    // Serial.print("RobotX: "); Serial.print(robotX);
+    // Serial.print(", RobotY: "); Serial.print(robotY);
+    // Serial.print(", RobotTheta: "); Serial.println(robotTheta);
 }
 
 void updateRobotStateOdometryOnly() {
     // Read the current encoder counts
-    long currentLeftEncoder = leftEncoder.read();
-    long currentRightEncoder = rightEncoder.read();
+    long currentLeftEncoder = leftEncoder.read() * -1;
+    long currentRightEncoder = rightEncoder.read() * -1;
 
     // Calculate the distance traveled by each wheel
-    float leftWheelDistance = (currentLeftEncoder - previousLeftEncoder) * (wheelCircumference / 360.0);  // Convert ticks to distance
-    float rightWheelDistance = (currentRightEncoder - previousRightEncoder) * (wheelCircumference / 360.0);
+    float leftWheelDistance = (currentLeftEncoder - previousLeftEncoder) * wheelCircumference / (150 * 8 * PI);  // Convert encoder rotation ticks to distance
+    float rightWheelDistance = (currentRightEncoder - previousRightEncoder) * wheelCircumference / (150 * 8 * PI);
 
     // Update the previous encoder counts for the next calculation
     previousLeftEncoder = currentLeftEncoder;
@@ -66,7 +66,10 @@ void updateRobotStateOdometryOnly() {
     robotY += distanceTravelled * sin(robotTheta);
 
     // Print debug information
-    Serial.print("RobotX: "); Serial.print(robotX);
-    Serial.print(", RobotY: "); Serial.print(robotY);
-    Serial.print(", RobotTheta: "); Serial.println(robotTheta);
+    // Serial.print("RobotX: "); Serial.print(robotX);
+    // Serial.print(", RobotY: "); Serial.print(robotY);
+    // Serial.print(", RobotTheta: "); Serial.println(robotTheta);
+    // Serial.print(leftEncoder.read());
+    // Serial.print(" ");
+    // Serial.println(rightEncoder.read());
 }
