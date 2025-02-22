@@ -31,13 +31,13 @@ BNO08x imu;
 
 // Robot parameters
 const double maxSpeed = 255.0;  // rpm
-const double wheelDiameter = 0.04;
+const double wheelDiameter = 0.06;
 const double wheelCircumference = wheelDiameter * PI;
 const double maxSpeedMS = maxSpeed / 60 * wheelCircumference;  // Maximum speed in m/s
-const float lookaheadDistance = 0.10;                          // Lookahead distance in meters
-const float wheelBase = 0.168;                                 // Distance between wheels in meters
+const float lookaheadDistance = 0.2;                          // Lookahead distance in meters
+const float wheelBase = 0.175;                                 // Distance between wheels in meters
 const float startX = 0.0;
-const float startY = 0.0;
+const float startY = -0.25;
 
 double inputLeft, outputLeft, setPointLeft;
 double kPLeft = 1.0, kILeft = 0.1, kDLeft = 0.05;
@@ -48,7 +48,7 @@ double kPRight = 1.0, kIRight = 0.1, kDRight = 0.05;
 PID rightMotorPID(&inputRight, &outputRight, &setPointRight, kPRight, kIRight, kDRight, DIRECT);
 
 long startTime;                     // Start time of the program
-long desiredTotalDuration = 64000;  // Total desired duration in milliseconds (e.g., 20 seconds)
+long desiredTotalDuration = 60000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
 void setup() {
   Serial.begin(115200);
@@ -63,14 +63,14 @@ void setup() {
 
   Serial.println("Setup starting");
 
-  // setupIMU();
+  setupIMU();
 
   leftMotorPID.SetMode(AUTOMATIC);
   rightMotorPID.SetMode(AUTOMATIC);
 
   startTime = millis();
 
-  // driveForwardDistance(wheelCircumference * 8 * PI);
+  // driveForwardDistance(wheelCircumference);
   // rotateLeftExact();
 
   // Adjust the final move to fit within the desired total duration
@@ -87,7 +87,7 @@ void setup() {
   // }
   // Serial.print("FinishedTime:");
   // Serial.print(millis() - startTime);
-  // Serial.println(",");
+  Serial.println(",");
 
   Serial.println("Finished setup");
 }
@@ -106,7 +106,7 @@ void loop() {
   //   Serial.println();
   // }
 
-  updateRobotStateOdometryOnly();
+  updateRobotState();
   purePursuit();
 
   delay(10);

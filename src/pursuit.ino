@@ -3,7 +3,13 @@
 const float waypoints[][2] = {
     {0.0, 0.0},
     {0.0, 1.0},
-    // {1.0, 1.5},
+    {0.5, 1.0},
+    {0.0, 1.0},
+    {0.0, 0.0},
+    {1.0, 0.0},
+    {1.0, 1.0},
+    {0.0, 1.0},
+    {1.0, 1.0}
     // {0.0, 2.0}
 };
 const int numWaypoints = sizeof(waypoints) / sizeof(waypoints[0]);
@@ -12,11 +18,30 @@ int totalDistanceToTravel = 0;
 
 int currentWaypoint = 0;
 
+double inputPurePursuit, outputPurePursuit, setPointPurePursuit;
+double kPPurePursuit = 0.20, kIPurePursuit = 0.0, kDPurPursuit = 0.0;
+PID purePursuitPID(&inputPurePursuit, &outputPurePursuit, &setPointPurePursuit, kPPurePursuit, kIPurePursuit, kDPurPursuit, DIRECT);
 
+long lastSegmentStartTime;
+double lastSegmentDistance;
 
 // Function to compute the Euclidean distance
-float distance(float x1, float y1, float x2, float y2) {
+float calculateDistance(float x1, float y1, float x2, float y2) {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
+}
+
+void calculateTotalDistance() {
+  for (int i = 0; i < numWaypoints - 1; i++) {
+    totalDistanceToTravel += calculateDistance(waypoints[i][0], waypoints[i][1], waypoints[i+1][0], waypoints[i+1][0]);
+  }
+}
+
+double calculateDistanceRemaining() {
+  double distanceRemaining = calculateDistance(robotX, robotY, waypoints[currentWaypoint][0], waypoints[currentWaypoint][1]);
+  for (int i = currentWaypoint; i < numWaypoints - 1; i++) {
+    distanceRemaining += calculateDistance(waypoints[i][0], waypoints[i][1], waypoints[i+1][0], waypoints[i+1][0]);
+  }
+  return distanceRemaining;
 }
 
 // Function to find the closest waypoint in Pure Pursuit
@@ -29,6 +54,14 @@ int findLookaheadPoint() {
       return i;
     }
     currentWaypoint++;
+    if (currentWaypoint == numWaypoints - 1 && millis() - startTime < desiredTotalDuration) {
+      lastSegmentStartTime == millis();
+      lastSegmentDistance = calculateDistance(robotX, robotY, waypoints[numWaypoints - 1][0], waypoints[numWaypoints - 1][1]) / wheelCircumference * 150 * 7 * 4; //Distance in ticks
+      setPointPurePursuit = lastSegmentDistance / ((desiredTotalDuration - (millis() - startTime)) / 1000.0);
+
+      purePursuitPID.SetMode(AUTOMATIC);
+      purePursuitPID.SetOutputLimits(0, 255);
+    }
   }
   return numWaypoints - 1; // Last waypoint
 }
@@ -123,22 +156,24 @@ void purePursuit() {
     Serial.println("Path Completed!");
     Serial.println("Path Completed!");
     Serial.println(distance);
+    Serial.println(lastSegmentStartTime);
     Serial.println(pow(waypointX - robotX, 2));
     return;
-  } else if (distance < 0.03 && currentWaypoint == numWaypoints - 1) { // Reached waypoint
+  } else if (distance < 0.10 && currentWaypoint == numWaypoints - 1) { // Reached waypoint
     currentWaypoint++;
     leftMotor.stop();
     rightMotor.stop();
     Serial.println("Path Completed!");
     Serial.println(distance);
+    lastSegmentStartTime = millis() - lastSegmentStartTime;
     Serial.println(pow(waypointX - robotX, 2));
     return;
   }
 
-  // if (abs(robotTheta - atan2(dy, dx)) > PI / 2) { //BRING BACK LATER WHEN GYRO IS FIXED
-  //   rotateToAngle(atan2(dy, dx));
-  //   return;
-  // }
+  if (abs(normalizeAngleToPi(robotTheta - atan2(dy, dx))) > PI * 3 / 4) { //BRING BACK LATER WHEN GYRO IS FIXED
+    rotateToAngleLessPrecise(atan2(dy, dx));
+    return;
+  }
 
   // if (distance > lookaheadDistance) {
   //   dx = dx / distance * lookaheadDistance;
@@ -162,6 +197,22 @@ void purePursuit() {
   leftSpeed = leftSpeed / maxAllowedSpeed * maxSpeed;
   rightSpeed = rightSpeed / maxAllowedSpeed * maxSpeed;
 
+  if (currentWaypoint == numWaypoints - 1 && millis() - startTime < desiredTotalDuration) {
+    double distanceRemaining = calculateDistance(robotX, robotY, waypoints[numWaypoints - 1][0], waypoints[numWaypoints - 1][1]);
+    double distanceTraveled = (lastSegmentDistance - distanceRemaining / wheelCircumference * (150 * 7 * 4));
+    double timeElapsed = millis() - lastSegmentStartTime;
+    inputPurePursuit = distanceTraveled / (timeElapsed / 1000.0);
+    purePursuitPID.Compute();
+
+    double multiplier = outputPurePursuit;
+    Serial.print("Input:"); Serial.print(inputPurePursuit);
+    Serial.print(",SetPoint:"); Serial.print(setPointPurePursuit);
+    Serial.print(",Multiplier:"); Serial.print(multiplier);
+    Serial.print(",DistanceTraveled:"); Serial.print(distanceTraveled);
+    Serial.print(",TimeElapsed:"); Serial.println(timeElapsed);
+    leftSpeed = leftSpeed / maxSpeed * multiplier;
+    rightSpeed = rightSpeed / maxSpeed * multiplier;
+  }
 
   // Apply motor commands
   leftMotor.setSpeed((int)abs(leftSpeed));
@@ -188,6 +239,7 @@ void purePursuit() {
   Serial.print(",LocalX:"); Serial.print(localX);
   Serial.print(",LocalY:"); Serial.print(localY);
   Serial.print(",Theta:"); Serial.print(robotTheta);
+  Serial.print(",AngleDifference:"); Serial.print(normalizeAngleToPi(robotTheta - atan2(dy, dx)));
   Serial.print(",LeftSpeed:"); Serial.print(leftSpeed);
   Serial.print(",RightSpeed:"); Serial.print(rightSpeed);
   // Serial.print(",LeftMotorSpeed:"); Serial.print(leftMotor.getSpeed());

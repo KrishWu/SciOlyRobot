@@ -4,6 +4,7 @@
 #define BNO08X_ADDR 0x4B  // SparkFun BNO08x Breakout (Qwiic) defaults to 0x4B
 
 float currentAngle = 0.0;
+float robotThetaOffset;
 
 bool isValidYaw(float &yaw) {
   if (imu.getSensorEvent() == true && imu.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR) {
@@ -20,14 +21,14 @@ float getCurrentAngle() {
       currentAngle = yaw;
     }
   }
-  return currentAngle;
+  return currentAngle - robotThetaOffset;
 }
 
 float getCurrentAngleWait() {
   float yaw = currentAngle;
   while (!isValidYaw(yaw)) {}
   currentAngle = yaw;
-  return currentAngle;
+  return currentAngle - robotThetaOffset;
 }
 
 void resetI2C() {
@@ -56,10 +57,10 @@ void setupIMU() {
     while (1);
   }
   Serial.println("BNO08x found!");
-
   setReports();
   Serial.println("Reading events");
   delay(100);
+  robotThetaOffset = getCurrentAngleWait();
 }
 
 // Define the sensor outputs you want to receive
