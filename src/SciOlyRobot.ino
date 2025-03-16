@@ -34,7 +34,7 @@ const double maxSpeed = 255.0;  // rpm
 const double wheelDiameter = 0.06;
 const double wheelCircumference = wheelDiameter * PI;
 const double maxSpeedMS = maxSpeed / 60 * wheelCircumference;  // Maximum speed in m/s
-const float lookaheadDistance = 0.2;                          // Lookahead distance in meters
+const float lookaheadDistance = 0.15;                          // Lookahead distance in meters
 const float wheelBase = 0.175;                                 // Distance between wheels in meters
 const float startX = 0.0;
 const float startY = -0.25;
@@ -47,8 +47,13 @@ double inputRight, outputRight, setPointRight;
 double kPRight = 1.0, kIRight = 0.1, kDRight = 0.05;
 PID rightMotorPID(&inputRight, &outputRight, &setPointRight, kPRight, kIRight, kDRight, DIRECT);
 
+double inputPurePursuit, outputPurePursuit, setPointPurePursuit;
+double kPPurePursuit = 500.0, kIPurePursuit = 50.0, kDPurPursuit = 0.0;
+PID purePursuitPID(&inputPurePursuit, &outputPurePursuit, &setPointPurePursuit, kPPurePursuit, kIPurePursuit, kDPurPursuit, DIRECT);
+
 long startTime;                     // Start time of the program
-long desiredTotalDuration = 60000;  // Total desired duration in milliseconds (e.g., 20 seconds)
+float totalDistanceOfPath;
+long desiredTotalDuration = 76000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
 void setup() {
   Serial.begin(115200);
@@ -69,6 +74,11 @@ void setup() {
   rightMotorPID.SetMode(AUTOMATIC);
 
   startTime = millis();
+  totalDistanceOfPath = calculateDistanceRemaining();
+
+  purePursuitPID.SetMode(AUTOMATIC);
+  purePursuitPID.SetOutputLimits(30, 255);
+  setPointPurePursuit = totalDistanceOfPath / ((desiredTotalDuration - (millis() - startTime)) / 1000.0);
 
   // driveForwardDistance(wheelCircumference);
   // rotateLeftExact();
