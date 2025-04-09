@@ -2,23 +2,33 @@
 // Waypoints (x, y coordinates in meters)
 const float waypoints[][2] = {
   {0.0, 0.0},
-  {0.0, 0.5},
-  {0.5, 0.6},//Gate 1
-  {-0.5, 0.5},
+  {-1.0, 0.0},
+  {-0.5, 0.5},//Gate 1
   {-0.5, 1.0},
-  {-1.0, 1.0},
-  {-1.0, 0.5}, //Gate2
-  {-1.0, 1.0},
+  {0.5, 1.0},
+  {0.5, 0.0},
+  {0.5, 1.0},
+  {0.0, 1.0}, //Gate2
+  {0.0, 1.5},
+  {1.0, 1.5},
+  {1.0, 1.0},
+  {1.0, 1.5},
+  {0.0, 1.5},
+  {0.0, 1.0},
   {-0.5, 1.0},
-  {-0.6, 1.5}, //Where it died
-  {-1.0, 1.5},// Gate 3
   {-0.5, 1.5},
-  {-0.5, 1.0},
-  {0.0, 1.0},
-  {0.0, 1.5}, //Gate 4
-  {0.0, 1.0},
-  {-1.5, 1.0},//
-  {-1.5, 1.5}
+  {-1.0, 1.5},
+  // {1.5, 1.5},
+  // {0.5, 1.5}, //Where it died
+  // {0.5, 1.0},
+  // {1.5, 0},// Gate 3
+  // {-0.5, 1.5},
+  // {-0.5, 1.0},
+  // {0.0, 1.0},
+  // {0.0, 1.5}, //Gate 4
+  // {0.0, 1.0},
+  // {-1.5, 1.0},//
+  // {-1.5, 1.5}
   // {0.0, 2.0}
 };
 const int numWaypoints = sizeof(waypoints) / sizeof(waypoints[0]);
@@ -170,7 +180,7 @@ if (currentWaypoint >= numWaypoints) {
   Serial.println(lastSegmentStartTime);
   Serial.println(pow(waypointX - robotX, 2));
   return;
-} else if (distance < 0.10 && currentWaypoint == numWaypoints - 1) { // Reached waypoint
+} else if (distance < 0.075 && currentWaypoint == numWaypoints - 1) { // Reached waypoint
   currentWaypoint++;
   leftMotor.stop();
   rightMotor.stop();

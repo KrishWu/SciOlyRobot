@@ -29,6 +29,8 @@ Encoder rightEncoder(C1B, C2B);
 // BNO08x IMU object
 BNO08x imu;
 
+// const int buttonPin = 6;
+
 // Robot parameters
 const double maxSpeed = 255.0;  // rpm
 const double wheelDiameter = 0.06;
@@ -48,12 +50,12 @@ double kPRight = 1.0, kIRight = 0.1, kDRight = 0.05;
 PID rightMotorPID(&inputRight, &outputRight, &setPointRight, kPRight, kIRight, kDRight, DIRECT);
 
 double inputPurePursuit, outputPurePursuit, setPointPurePursuit;
-double kPPurePursuit = 500.0, kIPurePursuit = 50.0, kDPurPursuit = 0.0;
+double kPPurePursuit = 1000.0, kIPurePursuit = 1000.0, kDPurPursuit = 0.0;
 PID purePursuitPID(&inputPurePursuit, &outputPurePursuit, &setPointPurePursuit, kPPurePursuit, kIPurePursuit, kDPurPursuit, DIRECT);
 
-long startTime;                     // Start time of the program
+long startTime;  // Start time of the program
 float totalDistanceOfPath;
-long desiredTotalDuration = 76000;  // Total desired duration in milliseconds (e.g., 20 seconds)
+long desiredTotalDuration = 55000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
 void setup() {
   Serial.begin(115200);
@@ -72,6 +74,20 @@ void setup() {
 
   leftMotorPID.SetMode(AUTOMATIC);
   rightMotorPID.SetMode(AUTOMATIC);
+
+  // pinMode(buttonPin, INPUT);
+
+  // int timePressed = 0;
+  // while (timePressed < 3) {
+  //   Serial.print("Waiting ");
+  //   Serial.println(timePressed);
+  //   if (digitalRead(buttonPin) == 1) {
+  //     timePressed += 1;
+  //   } else {
+  //     timePressed = 0;
+  //   }
+  //   delay(10);
+  // }
 
   startTime = millis();
   totalDistanceOfPath = calculateDistanceRemaining();

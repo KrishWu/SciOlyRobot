@@ -99,7 +99,7 @@ void rotateToAngleLessPrecise(float targetAngle) {
     angularDifference = normalizeAngleToPi(targetAngle - currentAngle);
 
     input90 = angularDifference;  // Update PID input
-    turn90PID.Compute();     // Compute PID output\
+    turn90PID.Compute();     // Compute PID output
 
     if (output90 > 0) {
       leftMotor.setSpeed(output90);
@@ -121,7 +121,7 @@ void rotateToAngleLessPrecise(float targetAngle) {
     Serial.print(output90);
     Serial.println(",");
 
-    if (abs(angularDifference) < PI / 8) {
+    if (abs(angularDifference) < PI / 16) {
       timeAtDestination++;
     } else {
       timeAtDestination == 0;
