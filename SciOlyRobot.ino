@@ -1,3 +1,11 @@
+#include <SparkFun_BNO08x_Arduino_Library.h>
+#include <sh2.h>
+#include <sh2_SensorValue.h>
+#include <sh2_err.h>
+#include <sh2_hal.h>
+#include <sh2_util.h>
+#include <shtp.h>
+
 #include <Wire.h>
 #include <SparkFun_BNO08x_Arduino_Library.h>  // Use the BNO08x Library
 #include <PID_v1.h>
@@ -29,7 +37,7 @@ Encoder rightEncoder(C1B, C2B);
 // BNO08x IMU object
 BNO08x imu;
 
-// const int buttonPin = 6;
+const int buttonPin = 20;
 
 // Robot parameters
 const double maxSpeed = 255.0;  // rpm
@@ -55,7 +63,7 @@ PID purePursuitPID(&inputPurePursuit, &outputPurePursuit, &setPointPurePursuit, 
 
 long startTime;  // Start time of the program
 float totalDistanceOfPath;
-long desiredTotalDuration = 55000;  // Total desired duration in milliseconds (e.g., 20 seconds)
+long desiredTotalDuration = 69000;  // Total desired duration in milliseconds (e.g., 20 seconds)
 
 void setup() {
   Serial.begin(115200);
@@ -75,19 +83,26 @@ void setup() {
   leftMotorPID.SetMode(AUTOMATIC);
   rightMotorPID.SetMode(AUTOMATIC);
 
-  // pinMode(buttonPin, INPUT);
+  delay(100);
 
-  // int timePressed = 0;
-  // while (timePressed < 3) {
-  //   Serial.print("Waiting ");
-  //   Serial.println(timePressed);
-  //   if (digitalRead(buttonPin) == 1) {
-  //     timePressed += 1;
-  //   } else {
-  //     timePressed = 0;
-  //   }
-  //   delay(10);
-  // }
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  delay(100);
+
+  int timePressed = 0;
+  while (timePressed < 3) {
+    Serial.print("Waiting ");
+    Serial.print(timePressed);
+    Serial.println(digitalRead(buttonPin));
+    if (digitalRead(buttonPin) == 0) {
+      timePressed += 1;
+    } else {
+      timePressed = 0;
+    }
+    delay(10);
+  }
+
+  delay(100);
 
   startTime = millis();
   totalDistanceOfPath = calculateDistanceRemaining();
